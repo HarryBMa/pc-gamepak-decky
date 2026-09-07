@@ -9,10 +9,22 @@ import asyncio
 import base64
 import mimetypes
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
 import decky  # provided by Decky Loader at runtime
+
+# Decky's plugin loader does not put the plugin's own directory on sys.path, so
+# `import cartridges` raises ModuleNotFoundError at import time and the plugin
+# process never finishes initialising. The failure is worse than it reads:
+# nothing gets registered, so every RPC the UI makes answers "Route does not
+# exist" rather than anything that points back here. Splice the directory in
+# front of sys.path before importing anything of ours. The tests run from this
+# directory already, so they neither need nor mind it.
+_PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
+if _PLUGIN_DIR not in sys.path:
+    sys.path.insert(0, _PLUGIN_DIR)
 
 import cartridges
 

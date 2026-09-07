@@ -94,13 +94,33 @@ const Shelf: FC = () => {
  */
 function patch(route: any): any {
   try {
+    if (!route?.children?.props) {
+      // Said out loud because the alternative is a plugin that loads, reports
+      // no error, and simply has no row — which is indistinguishable from the
+      // backend finding no cartridge.
+      console.warn(
+        "[pc-gamepak] /library/home has no children.props to patch; " +
+          "Steam's home page is not the shape this expects. Row disabled.",
+      );
+      return route;
+    }
+
     afterPatch(route.children.props, "renderFunc", (_: unknown, ret: any) => {
       try {
-        if (!ret?.props?.children) return ret;
+        if (!ret?.props?.children) {
+          // Same reasoning as above: this used to `return ret` in silence, and
+          // when the shape did change there was nothing anywhere to say so.
+          console.warn(
+            "[pc-gamepak] renderFunc returned no children; nowhere to put the " +
+              "row on this Steam build.",
+          );
+          return ret;
+        }
 
         // Guard against double-patching when the route re-renders.
         if (ret.props.__pcGamePakPatched) return ret;
         ret.props.__pcGamePakPatched = true;
+        console.debug("[pc-gamepak] shelf injected into /library/home");
 
         const original = ret.props.children;
         ret.props.children = (

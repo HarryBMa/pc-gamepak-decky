@@ -9,6 +9,7 @@ import asyncio
 import base64
 import mimetypes
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -87,6 +88,26 @@ class Plugin:
         a payload carrying every cover on the drive.
         """
         return self._serial
+
+    async def get_app_ids(self) -> list[int]:
+        """Just the Steam appids on the cartridges, for Deck Shelves.
+
+        Deliberately not get_cartridges(): a shelf source only wants numbers,
+        and that one inlines every cover as a data URI. Asking it for appids
+        would ship megabytes of base64 to answer a question about integers.
+        """
+        found: list[int] = []
+        for cartridge in self._cartridges:
+            for game in cartridge["games"]:
+                match = re.match(
+                    r"steam://rungameid/(\d+)", game.get("executable", ""), re.I
+                )
+                if not match:
+                    continue  # a path on the drive, or a heroic:// URI: no appid
+                app_id = int(match.group(1))
+                if app_id not in found:
+                    found.append(app_id)
+        return found
 
     async def rescan(self) -> list[dict[str, Any]]:
         """Scan now rather than waiting for the next tick."""

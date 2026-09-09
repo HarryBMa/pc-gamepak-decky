@@ -8,6 +8,7 @@ import { definePlugin, routerHook } from "@decky/api";
 import type { FC } from "react";
 
 import { CartridgeShelf } from "./CartridgeShelf";
+import { offerCartridgesToDeckShelves } from "./deckShelves";
 import { useCartridges, launch } from "./api";
 
 const QuickAccess: FC = () => {
@@ -59,10 +60,16 @@ const QuickAccess: FC = () => {
 };
 
 export default definePlugin(() => {
-  // The home row. Patching Steam's own React tree is the only way in, and it
-  // is the part most likely to need adjusting against a given Steam build —
-  // see README. The Quick Access panel above works regardless.
+  // The home row. Patching Steam's own React tree is the only way in on its
+  // own, and it is the part most likely to need adjusting against a given
+  // Steam build — see README. The Quick Access panel above works regardless.
   routerHook.addPatch("/library/home", CartridgeShelf.patch);
+
+  // The other way onto the home screen, and the one that actually lands on the
+  // Deck client this was tested against: hand the games to Deck Shelves and let
+  // it place them. Costs nothing when Deck Shelves is not installed — the API
+  // queues the registration and never fires.
+  const unregisterShelfSource = offerCartridgesToDeckShelves();
 
   return {
     name: "PC GamePak",
@@ -71,6 +78,7 @@ export default definePlugin(() => {
     icon: <CartridgeShelf.Icon />,
     onDismount() {
       routerHook.removePatch("/library/home", CartridgeShelf.patch);
+      unregisterShelfSource();
     },
   };
 });

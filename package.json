@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@deck-shelves/api": "^4.0.5",
     "@decky/api": "^1.1.3",
     "react": "19.2.7",
     "react-dom": "19.2.7"

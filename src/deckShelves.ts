@@ -1,6 +1,8 @@
 import { callable } from "@decky/api";
 import { register } from "@deck-shelves/api";
 
+import { ownedAppIds } from "./shortcuts";
+
 /**
  * Offer the cartridge's games to Deck Shelves as a shelf source.
  *
@@ -15,9 +17,11 @@ import { register } from "@deck-shelves/api";
  * This is also less code doing less: Deck Shelves owns placement, focus,
  * artwork and the context menu, and asks us only for a list of appids.
  *
- * A cartridge naming a path rather than a `steam://` URI has no appid and
- * cannot appear here. That is the same limit the launcher has — see `launch`
- * in api.ts — and the Quick Access panel still lists those games.
+ * A cartridge naming a path rather than a `steam://` URI has no appid of its
+ * own. If the user has turned on "Add carried games to Steam", those games have
+ * a shortcut, and a shortcut has an appid — so they are folded in here too.
+ * Without that the setting would add shortcuts to the library and still leave
+ * the shelf empty, which is most of the way to useless.
  */
 
 /** Appids on the cartridges. Cheap: no artwork crosses the bridge. */
@@ -34,8 +38,10 @@ export function offerCartridgesToDeckShelves(): () => void {
         displayName: "PC GamePak cartridge",
         async resolve(limit: number): Promise<number[]> {
           try {
-            const ids = await getAppIds();
-            return ids.slice(0, limit);
+            const fromUris = await getAppIds();
+            const fromShortcuts = await ownedAppIds();
+            const all = [...fromUris, ...fromShortcuts.filter((id) => !fromUris.includes(id))];
+            return all.slice(0, limit);
           } catch (error) {
             // Returning nothing empties the shelf, which is the honest answer
             // when the backend cannot say what is plugged in. Throwing here

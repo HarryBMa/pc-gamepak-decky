@@ -7,6 +7,7 @@ does as little as possible.
 
 import asyncio
 import base64
+import json
 import mimetypes
 import os
 import re
@@ -108,6 +109,65 @@ class Plugin:
                 if app_id not in found:
                     found.append(app_id)
         return found
+
+    async def get_shortcut_candidates(self) -> list[dict[str, str]]:
+        """Games the cartridge carries itself, rather than points at.
+
+        These name a path, not a URI, so Steam has never heard of them and they
+        have no appid — which is why they cannot appear in a shelf. Handing one
+        to Steam as a shortcut is the only way to give it one, and that is a
+        write to the user's library, so it stays behind a setting.
+        """
+        out: list[dict[str, str]] = []
+        for cartridge in self._cartridges:
+            mount = os.path.realpath(cartridge["mount"])
+            for game in cartridge["games"]:
+                executable = game.get("executable", "")
+                if not executable or re.match(r"[a-z][a-z0-9+.-]*://", executable, re.I):
+                    continue  # a URI: Steam already knows how to open it
+                # Cartridges are written on Windows too, so separators vary.
+                relative = executable.replace("\\", "/")
+                path = os.path.realpath(os.path.join(mount, relative))
+                # A cartridge is a drive somebody handed you. `..` in the conf
+                # must not become a shortcut pointing at the host.
+                if not (path == mount or path.startswith(mount + os.sep)):
+                    decky.logger.warning("refusing path outside the cartridge: %s", executable)
+                    continue
+                if not os.path.isfile(path):
+                    continue
+                out.append(
+                    {
+                        "title": game.get("title") or os.path.basename(path),
+                        "exe": path,
+                        "startDir": os.path.dirname(path),
+                        "cartridge": cartridge["id"],
+                    }
+                )
+        return out
+
+    async def get_settings(self) -> dict[str, Any]:
+        try:
+            with open(self._settings_file(), encoding="utf-8") as handle:
+                return json.load(handle)
+        except (OSError, ValueError):
+            return {}
+
+    async def set_settings(self, data: dict[str, Any]) -> bool:
+        try:
+            with open(self._settings_file(), "w", encoding="utf-8") as handle:
+                json.dump(data, handle)
+            return True
+        except OSError:
+            decky.logger.exception("could not save settings")
+            return False
+
+    @staticmethod
+    def _settings_file() -> str:
+        directory = getattr(decky, "DECKY_PLUGIN_SETTINGS_DIR", None) or os.path.dirname(
+            os.path.abspath(__file__)
+        )
+        os.makedirs(directory, exist_ok=True)
+        return os.path.join(directory, "settings.json")
 
     async def rescan(self) -> list[dict[str, Any]]:
         """Scan now rather than waiting for the next tick."""

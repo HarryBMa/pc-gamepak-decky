@@ -2,14 +2,57 @@ import {
   ButtonItem,
   PanelSection,
   PanelSectionRow,
+  ToggleField,
   staticClasses,
 } from "@decky/ui";
 import { definePlugin, routerHook } from "@decky/api";
-import type { FC } from "react";
+import { useEffect, useState, type FC } from "react";
 
 import { CartridgeShelf } from "./CartridgeShelf";
 import { offerCartridgesToDeckShelves } from "./deckShelves";
+import * as shortcuts from "./shortcuts";
 import { useCartridges, launch } from "./api";
+
+/**
+ * The one setting: whether games the cartridge carries get a Steam shortcut.
+ *
+ * Separate component so toggling it does not re-render the cartridge list, and
+ * so the list still renders if the setting cannot be read.
+ */
+const ShortcutSetting: FC<{ cartridgeCount: number }> = ({ cartridgeCount }) => {
+  const [on, setOn] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    shortcuts.isEnabled().then(setOn).catch(() => {});
+  }, []);
+
+  // Cartridges coming and going is what shortcuts have to follow.
+  useEffect(() => {
+    if (on) void shortcuts.sync();
+  }, [on, cartridgeCount]);
+
+  return (
+    <PanelSection title="Settings">
+      <PanelSectionRow>
+        <ToggleField
+          label="Add carried games to Steam"
+          description="Games stored on the cartridge have no Steam appid, so they cannot appear on the home screen. This adds them as shortcuts, and removes them again on eject."
+          checked={on}
+          disabled={busy}
+          onChange={(next: boolean) => {
+            setBusy(true);
+            setOn(next);
+            shortcuts
+              .setEnabled(next)
+              .catch((error) => console.error("[pc-gamepak] setting failed", error))
+              .finally(() => setBusy(false));
+          }}
+        />
+      </PanelSectionRow>
+    </PanelSection>
+  );
+};
 
 const QuickAccess: FC = () => {
   const { cartridges, loading, refresh } = useCartridges();
@@ -31,6 +74,7 @@ const QuickAccess: FC = () => {
             Scan again
           </ButtonItem>
         </PanelSectionRow>
+        <ShortcutSetting cartridgeCount={0} />
       </PanelSection>
     );
   }
@@ -48,6 +92,7 @@ const QuickAccess: FC = () => {
           ))}
         </PanelSection>
       ))}
+      <ShortcutSetting cartridgeCount={cartridges.length} />
       <PanelSection>
         <PanelSectionRow>
           <ButtonItem layout="below" onClick={refresh}>

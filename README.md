@@ -53,34 +53,46 @@ It is off by default and that default is the point. Everything else here is
 read-only — it reads a drive and draws a row — which is what makes it safe to
 plug in a cartridge somebody handed you.
 
-## Windows games need their Proton prefix off the cartridge
+## Windows games and exFAT
 
-Measured, on the hardware above: a Windows game will not start from an exFAT
-cartridge without help, and the error Steam shows — "Disk write error",
-`AppError_11` — says nothing about why.
+Measured on the hardware above: a Windows game will not start from an exFAT
+cartridge, and the error Steam shows — "Disk write error", `AppError_11` — says
+nothing about why.
 
-Two things go wrong, both because **exFAT has no symlinks**:
-
-1. Steam installs the compatibility tool into the game's own library, so it
-   tries to unpack Proton onto the cartridge. Proton contains 1892 symlinks and
-   the first one, `files/bin/msidb -> wine`, ends the install.
-2. Proton then builds its prefix in the same library. A prefix is made of
-   symlinks too.
-
-Steam's own `compat_log.txt` names the syscall:
+**Steam installs a compatibility tool into the library the game lives in.** So
+launching a cartridge game whose Proton the host does not have makes Steam try
+to unpack Proton *onto the cartridge*. Proton contains 1892 symlinks, exFAT has
+none, and the first one ends it — `files/bin/msidb -> wine`, the exact path in
+the error. Steam's own `compat_log.txt` names the syscall:
 `os.symlink(...)` → `PermissionError: [Errno 1] Operation not permitted`.
 
-The fix is per-game, and it is what the shortcut setting applies automatically:
+**Naming a Proton the host already has is the whole fix.** With the
+compatibility tool set to an installed Proton, Steam has no tool to install, the
+prefix lands beside that Proton rather than on the cartridge, and the game runs
+from the cartridge unchanged. A `STEAM_COMPAT_DATA_PATH` override is *not*
+needed — tested with launch options cleared, and it still works.
 
-- **Compatibility tool**: pick a Proton already installed on the internal drive,
-  so Steam has no reason to unpack one onto the cartridge.
-- **Launch options**:
-  `STEAM_COMPAT_DATA_PATH="$HOME/.local/share/Steam/steamapps/compatdata/<appid>" %command%`
+That is what the shortcut setting does for carried games. For games the
+cartridge only points at, it is one field in Steam's per-game properties.
 
-With both, Tomb Raider runs from the cartridge with its prefix on the internal
-drive and nothing written to the cartridge's `compatdata`.
+### The better answer: do not use exFAT
 
-Native Linux games need none of this. A btrfs cartridge needs none of this.
+The cartridge filesystem is the real cause, and NTFS removes it. Tested with the
+kernel `ntfs3` driver on a volume automounted by udisks exactly as a cartridge
+would be — `/run/media/$USER/...`, `uid=1000`, no root:
+
+| | exFAT | NTFS (`ntfs3`) |
+|---|---|---|
+| Symlinks | **no** | yes |
+| `chmod` persists | no | yes |
+| Executable bit | no | yes |
+| Hardlinks | no | yes |
+| Holds a Proton install | **no** | yes — all 1892 symlinks |
+| Readable on Windows | yes | yes, natively |
+
+An NTFS cartridge needs no per-game settings at all: Steam can install Proton
+onto it like any other drive. Native Linux games and btrfs cartridges were never
+affected.
 - **Eject.** Same reason.
 - **Write to Steam.** No shortcuts, no collections, no library registration.
   It reads a drive and draws a row.

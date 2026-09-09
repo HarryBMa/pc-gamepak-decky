@@ -13,10 +13,9 @@ import { callable } from "@decky/api";
  * Shelves shelf source can only return appids. Without a shortcut there is no
  * number to return.
  *
- * A shortcut alone is not enough for a Windows game. It also needs Proton, and
- * a prefix somewhere Proton can actually build one: exFAT has no symlinks, and
- * Proton's prefix is made of them, so the prefix is pointed at the internal
- * drive. See the README.
+ * A shortcut alone is not enough for a Windows game: it also needs a Proton the
+ * host already has, or Steam will try to install one onto the cartridge. See
+ * the README.
  */
 
 export interface Candidate {
@@ -92,14 +91,16 @@ export async function sync(): Promise<void> {
       );
       if (typeof appId !== "number" || !appId) continue;
 
-      // A .exe on a cartridge needs Proton, and a prefix off the cartridge —
-      // exFAT cannot hold the symlinks a prefix is made of.
+      // A .exe needs Proton, and it must be one the host already has. Steam
+      // installs a compatibility tool into the library the game lives in, so
+      // left to itself it will try to unpack Proton onto the cartridge — and on
+      // exFAT that dies on the first of its 1892 symlinks, which Steam reports
+      // as "Disk write error". Naming an installed Proton avoids the install
+      // entirely, and the prefix then lands beside that Proton rather than on
+      // the cartridge. Measured: this alone is enough, and no
+      // STEAM_COMPAT_DATA_PATH override is needed.
       try {
         (SteamClient as any).Apps.SpecifyCompatTool(appId, "proton_experimental");
-        (SteamClient as any).Apps.SetAppLaunchOptions(
-          appId,
-          `STEAM_COMPAT_DATA_PATH="$HOME/.local/share/Steam/steamapps/compatdata/${appId}" %command%`,
-        );
       } catch (error) {
         console.warn("[pc-gamepak] shortcut added but Proton not configured", error);
       }

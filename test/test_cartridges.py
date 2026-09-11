@@ -155,5 +155,98 @@ class Scanning(unittest.TestCase):
         self.assertEqual(cartridges.scan(("/no/such/place",)), [])
 
 
+class Stats(unittest.TestCase):
+    """The count on the drive, which is the half that makes it cross-machine."""
+
+    def setUp(self):
+        self.scratch = tempfile.TemporaryDirectory()
+        self.root = Path(self.scratch.name)
+        (self.root / cartridges.CONF_NAME).write_text(
+            "title=Stardew Valley\nexecutable=steam://rungameid/413150\n",
+            encoding="utf-8",
+        )
+
+    def tearDown(self):
+        self.scratch.cleanup()
+
+    def test_the_key_matches_the_launchers(self):
+        # A row written on Windows has to be the row found here.
+        self.assertEqual(
+            cartridges.stats_key("Games\\Foo\\Foo.exe"),
+            cartridges.stats_key("Games/Foo/Foo.exe"),
+        )
+        self.assertEqual(
+            cartridges.stats_key("Steam://RunGameID/620"),
+            cartridges.stats_key("steam://rungameid/620"),
+        )
+        # A path is left alone: two files can differ by case on ext4.
+        self.assertNotEqual(cartridges.stats_key("a/x.sh"), cartridges.stats_key("a/X.sh"))
+        # A drive letter is not a scheme.
+        self.assertEqual(cartridges.stats_key("C://Games/Foo.exe"), "C://Games/Foo.exe")
+
+    def test_a_cartridge_with_no_history_reads_as_empty(self):
+        self.assertEqual(cartridges.read_stats(self.root), {})
+
+    def test_a_corrupt_file_reads_as_empty_rather_than_raising(self):
+        (self.root / cartridges.ASSET_DIR).mkdir()
+        cartridges.stats_path(self.root).write_text("{ not json", encoding="utf-8")
+        self.assertEqual(cartridges.read_stats(self.root), {})
+
+    def test_the_desktops_hours_arrive_with_the_cartridge(self):
+        (self.root / cartridges.ASSET_DIR).mkdir()
+        cartridges.stats_path(self.root).write_text(
+            '{"version": 1, "games": {"steam://rungameid/413150": '
+            '{"launches": 9, "seconds": 36000, "lastHost": "workshop"}}}',
+            encoding="utf-8",
+        )
+        cartridge = cartridges.read_cartridge(self.root)
+        self.assertEqual(cartridge["games"][0]["stats"]["launches"], 9)
+        self.assertEqual(cartridge["games"][0]["stats"]["seconds"], 36000)
+
+    def test_a_game_nobody_has_played_has_an_empty_history(self):
+        cartridge = cartridges.read_cartridge(self.root)
+        self.assertEqual(cartridge["games"][0]["stats"], {})
+
+    def test_a_launch_here_is_added_to_what_the_desktop_recorded(self):
+        (self.root / cartridges.ASSET_DIR).mkdir()
+        cartridges.stats_path(self.root).write_text(
+            '{"version": 1, "games": {"steam://rungameid/413150": '
+            '{"launches": 9, "seconds": 36000, "firstPlayed": 1700000000}}}',
+            encoding="utf-8",
+        )
+        self.assertTrue(
+            cartridges.record_launch(
+                self.root, "steam://rungameid/413150", "Stardew Valley", host="steamdeck"
+            )
+        )
+        entry = cartridges.read_stats(self.root)["steam://rungameid/413150"]
+        self.assertEqual(entry["launches"], 10, "the desktop's nine are still there")
+        self.assertEqual(entry["seconds"], 36000, "no duration is invented here")
+        self.assertEqual(entry["firstPlayed"], 1700000000, "first play is not today")
+        self.assertEqual(entry["lastHost"], "steamdeck")
+        self.assertGreater(entry["lastPlayed"], 1700000000)
+
+    def test_a_first_launch_starts_the_row(self):
+        cartridges.record_launch(self.root, "steam://rungameid/1", "X", host="steamdeck")
+        entry = cartridges.read_stats(self.root)["steam://rungameid/1"]
+        self.assertEqual(entry["launches"], 1)
+        self.assertEqual(entry["seconds"], 0)
+        self.assertEqual(entry["firstPlayed"], entry["lastPlayed"])
+
+    def test_a_write_that_cannot_land_is_reported_not_raised(self):
+        # The parent is a file, so the .gamepak directory cannot be made.
+        blocked = self.root / "blocked"
+        blocked.write_text("not a directory", encoding="utf-8")
+        self.assertFalse(cartridges.record_launch(blocked, "steam://rungameid/1"))
+
+    def test_writing_leaves_no_temporary_file_behind(self):
+        cartridges.record_launch(self.root, "steam://rungameid/1")
+        leftovers = [
+            p.name for p in (self.root / cartridges.ASSET_DIR).iterdir()
+            if p.name.endswith(".tmp")
+        ]
+        self.assertEqual(leftovers, [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

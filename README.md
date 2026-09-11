@@ -21,7 +21,9 @@ reads it; it does not need PC GamePak installed.
 - Offers the cartridge's games to [Deck Shelves](https://github.com/santojon/Deck-Shelves)
   as a shelf source, so it can put them on the home screen. This is the route
   that works; add a shelf there and pick **PC GamePak cartridge** as its source.
-- Lists the same games in the Quick Access menu.
+- Lists the same games in the Quick Access menu, each with what the *cartridge*
+  remembers: hours, launches, and when and where it was last played. Those
+  numbers come off the drive, not out of Steam — see [Hours](#hours).
 - Optionally, and off by default, gives games the cartridge *carries* a Steam
   shortcut so they can appear too — see [Carried games](#carried-games).
 - Tries to put a row on `/library/home` itself, which currently does nothing —
@@ -37,6 +39,31 @@ reads it; it does not need PC GamePak installed.
   Access panel still lists it.
 - **Write to Steam, unless asked.** No collections, no library registration.
   The one exception is the shortcut setting below, which is off until turned on.
+- **Write anywhere on the host.** The only file this plugin writes is
+  `.gamepak/stats.json` on the cartridge itself, and only because you started
+  a game — see below.
+
+## Hours
+
+A cartridge counts its own launches, in `.gamepak/stats.json` on the drive. The
+PC GamePak launcher writes it on a desktop; this plugin reads it, and adds to
+it, so the number follows the cartridge rather than staying on whichever machine
+happened to play it. That is the whole point of keeping it on the drive, and it
+only works if both ends keep it — so plugging a cartridge into a Deck shows the
+hours the desktop recorded, and playing it here shows up on the desktop next
+time.
+
+**Launches, not hours, are counted here.** Steam is handed a `steam://` URI and
+tells this plugin nothing about what happens next — not when the game starts,
+and not when it stops — so a duration recorded from here would be invented. The
+launcher is a window that stays open for the session and records those properly.
+A cartridge played on a Deck gains a launch, a last-played date, and `steamdeck`
+as the machine, which is the part anyone actually looks for.
+
+It is not behind a setting, and the case for that is the same as the launcher's:
+it happens because you pressed a game, it goes to the drive that game is on, and
+it is that drive's own bookkeeping. A cartridge mounted read-only keeps playing
+without a count.
 
 ## Carried games
 
@@ -49,9 +76,11 @@ appears in the Quick Access panel and nowhere else.
 game to Steam as a shortcut, which gives it an appid, and removes the shortcut
 again when the cartridge goes. Only shortcuts this plugin made are ever removed.
 
-It is off by default and that default is the point. Everything else here is
-read-only — it reads a drive and draws a row — which is what makes it safe to
-plug in a cartridge somebody handed you.
+It is off by default and that default is the point. Nothing else here touches
+Steam's library or the host at all: the only thing this plugin ever writes is
+the cartridge's own launch count, on the cartridge, when you start a game. It
+reads a drive and draws a row, which is what makes it safe to plug in a
+cartridge somebody handed you.
 
 ## Windows games and exFAT
 
@@ -94,14 +123,12 @@ An NTFS cartridge needs no per-game settings at all: Steam can install Proton
 onto it like any other drive. Native Linux games and btrfs cartridges were never
 affected.
 - **Eject.** Same reason.
-- **Write to Steam.** No shortcuts, no collections, no library registration.
-  It reads a drive and draws a row.
 
 ## What is verified
 
 | | |
 |---|---|
-| `cartridges.py` — parsing, art resolution, mount scanning | **15 tests, passing.** `python test/test_cartridges.py` |
+| `cartridges.py` — parsing, art resolution, mount scanning, the stats file | **24 tests, passing.** `python test/test_cartridges.py` |
 | `main.py` — the Decky wrapper | **Runs.** Loads, and reports `cartridges changed` as a drive comes and goes |
 | Deck Shelves source | **Works.** Resolves 9 appids from a ten-game cartridge, 0 after eject, 9 again on reinsert |
 | Quick Access panel | **Works.** |

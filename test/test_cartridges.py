@@ -4,6 +4,7 @@ Run with `python -m pytest test/` or `python test/test_cartridges.py`.
 No Decky, no Deck, no Steam — this half is plain file parsing on purpose.
 """
 
+import os
 import sys
 import tempfile
 import unittest
@@ -246,6 +247,60 @@ class Stats(unittest.TestCase):
             if p.name.endswith(".tmp")
         ]
         self.assertEqual(leftovers, [])
+
+
+class FrontEndSetting(unittest.TestCase):
+    """Whether PC GamePak has made this plugin the front-end."""
+
+    def setUp(self):
+        self.scratch = tempfile.TemporaryDirectory()
+        os.environ["PC_GAMEPAK_CONFIG_DIR"] = self.scratch.name
+
+    def tearDown(self):
+        os.environ.pop("PC_GAMEPAK_CONFIG_DIR", None)
+        self.scratch.cleanup()
+
+    def write(self, text):
+        Path(self.scratch.name, cartridges.SETTINGS_FILE).write_text(
+            text, encoding="utf-8"
+        )
+
+    def test_no_settings_file_means_enabled(self):
+        # The plugin is documented as needing PC GamePak not to be installed.
+        # Refusing to work until a program the user does not have says it may
+        # would be absurd.
+        self.assertIsNone(cartridges.settings_path())
+        self.assertTrue(cartridges.is_enabled())
+
+    def test_switched_on_is_enabled(self):
+        self.write('{"frontends": {"launcher": false, "decky": true}}')
+        self.assertTrue(cartridges.is_enabled())
+
+    def test_switched_off_is_disabled(self):
+        # The one thing the file can do: take this plugin out of the picture.
+        self.write('{"frontends": {"launcher": true, "decky": false}}')
+        self.assertFalse(cartridges.is_enabled())
+
+    def test_a_file_that_says_nothing_about_us_means_enabled(self):
+        for text in [
+            "{}",
+            '{"frontends": {}}',
+            '{"frontends": {"launcher": true}}',
+            '{"frontends": "nonsense"}',
+            '{"steamgriddbEnabled": true}',
+        ]:
+            self.write(text)
+            self.assertTrue(cartridges.is_enabled(), text)
+
+    def test_an_unreadable_file_means_enabled(self):
+        # A half-written or corrupt settings file must not silently remove the
+        # only front-end on a Deck.
+        self.write("{ not json at all")
+        self.assertTrue(cartridges.is_enabled())
+
+    def test_a_non_boolean_is_not_read_as_one(self):
+        self.write('{"frontends": {"decky": "no"}}')
+        self.assertTrue(cartridges.is_enabled())
 
 
 if __name__ == "__main__":

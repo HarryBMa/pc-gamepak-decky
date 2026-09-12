@@ -162,6 +162,26 @@ If the row does not appear, the Quick Access panel still works, and
 `console` in CEF debugging will have a `[pc-gamepak]` line if the patch ran and
 found nothing to attach to.
 
+## Switching it off from PC GamePak
+
+If [PC GamePak](https://github.com/HarryBMa/pc-gamepak) is also installed, its
+settings decide which front-ends handle a cartridge — its own launcher window,
+this row, or both. Turn **Steam Deck row** off there and this plugin offers
+nothing: no row, no shelf source, no panel entries. Turn it on and the launcher
+stops opening a window over the top of it.
+
+That is one boolean in one file, `~/.local/state/pc-gamepak/settings.json`:
+
+```json
+{ "frontends": { "launcher": false, "decky": true } }
+```
+
+Read on every scan, so a change takes effect without restarting Decky. **Absent,
+unreadable, or silent about this plugin all mean on** — the plugin does not need
+PC GamePak installed, and refusing to work until a program you do not have says
+it may would be absurd. The file can only ever switch it off, and only by saying
+so outright.
+
 ## Install
 
 Not in the Decky store. Build it and copy it over:

@@ -200,6 +200,17 @@ class Plugin:
     # ---------------------------------------------------------------- lifecycle
 
     async def _refresh(self) -> None:
+        # Switched off in PC GamePak's settings means this plugin is not the
+        # front-end on this machine, so it offers nothing: no row, no shelf, no
+        # panel entries. Checked on every scan rather than at load, so turning it
+        # on in the launcher takes effect without restarting Decky.
+        if not await asyncio.to_thread(cartridges.is_enabled):
+            if self._cartridges:
+                decky.logger.info("switched off in PC GamePak settings; offering nothing")
+                self._cartridges = []
+                self._serial += 1
+            return
+
         found = await asyncio.to_thread(cartridges.scan)
 
         # Compare on identity and contents, not on the inlined art — otherwise

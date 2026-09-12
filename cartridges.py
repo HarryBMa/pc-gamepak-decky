@@ -158,6 +158,59 @@ def find_default_art(root: Path) -> str | None:
     return None
 
 
+# Where PC GamePak keeps its settings, and the key that says which front-ends
+# should handle a cartridge. Read, never written: the launcher owns this file.
+#
+# The whole contract between the two projects is one boolean in one JSON file.
+# No socket, no daemon, no protocol to version — which matters because this is
+# Python inside Steam's process tree and that is Rust in a window, and anything
+# richer would be a thing to keep in step forever.
+SETTINGS_DIRS = (
+    os.path.join(
+        os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"),
+        "pc-gamepak",
+    ),
+)
+SETTINGS_FILE = "settings.json"
+FRONTEND_ID = "decky"
+
+
+def settings_path() -> Path | None:
+    """The launcher's settings file, if it is where it should be."""
+    override = os.environ.get("PC_GAMEPAK_CONFIG_DIR")
+    roots = (override,) + SETTINGS_DIRS if override else SETTINGS_DIRS
+    for root in roots:
+        candidate = Path(root) / SETTINGS_FILE
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def is_enabled() -> bool:
+    """Whether this plugin has been made a front-end in PC GamePak's settings.
+
+    **True when there is no answer**, which is the one judgement call here. A Deck
+    with this plugin installed and PC GamePak not installed at all has no settings
+    file to read, and refusing to work until a program the user does not have says
+    it may would be absurd — the plugin is documented as needing nothing else.
+
+    So the file only ever switches it *off*, and only when it explicitly says so.
+    """
+    path = settings_path()
+    if path is None:
+        return True
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return True
+    frontends = data.get("frontends")
+    if not isinstance(frontends, dict):
+        return True
+    value = frontends.get(FRONTEND_ID)
+    return value if isinstance(value, bool) else True
+
+
 def stats_key(executable: str) -> str:
     """The identity of a game, the way `.gamepak/stats.json` keys it.
 
